@@ -1,50 +1,49 @@
-# Step 1: Install required libraries
-!pip install SimpleITK matplotlib
-
-# Step 2: Upload the MRI image file (.nii or .nii.gz)
-from google.colab import files
-uploaded = files.upload()
-
-# Step 3: Read the uploaded file
-import SimpleITK as sitk
-import matplotlib.pyplot as plt
-
-# Get the uploaded filename (assumes only one file uploaded)
-filename = next(iter(uploaded))
-
-# Load the MRI image
-image = sitk.ReadImage(filename)
-image = sitk.Cast(image, sitk.sitkFloat32)  # Ensure it's in float32 format
-
-# Step 4: Apply Otsu threshold segmentation
-otsu_filter = sitk.OtsuThresholdImageFilter()
-otsu_filter.SetInsideValue(0)
-otsu_filter.SetOutsideValue(1)
-segmented = otsu_filter.Execute(image)
-
-# Step 5: Save the segmented output
-output_filename = "segmented_output.nii.gz"
-sitk.WriteImage(segmented, output_filename)
-print(f"Segmented image saved as: {output_filename}")
-
-# Step 6: Visualize a middle slice
-image_array = sitk.GetArrayFromImage(image)
-segmented_array = sitk.GetArrayFromImage(segmented)
-
-# Display middle slice
-slice_index = image_array.shape[0] // 2
-
-plt.figure(figsize=(10, 5))
-
-plt.subplot(1, 2, 1)
-plt.title("Original MRI Slice")
-plt.imshow(image_array[slice_index], cmap='gray')
-plt.axis('off')
-
-plt.subplot(1, 2, 2)
-plt.title("Segmented Slice (Otsu)")
-plt.imshow(segmented_array[slice_index], cmap='gray')
-plt.axis('off')
-
-plt.tight_layout()
-plt.show()
+import numpy as np 
+import matplotlib.pyplot as plt 
+from skimage import filters, morphology, measure, draw 
+from skimage.segmentation import clear_border 
+from skimage.util import random_noise 
+from skimage.color import label2rgb
+ # Step 1: Generate a synthetic "MRI-like" image 
+def generate_synthetic_mri(size=256):
+    image = np.zeros((size, size), dtype=np.float32)
+    # Add a circular "brain" region 
+    rr, cc = draw.disk((size // 2, size // 2), size // 3) 
+    image[rr, cc] = 0.6
+    # Add synthetic "tumor" region 
+    rr, cc = draw.disk((size // 2 + 30, size // 2), size // 10) 
+    image[rr, cc] = 0.9 
+    # Add Gaussian noise
+    image = random_noise(image, mode='gaussian', var=0.01)
+    return image
+    # Step 2: Segment using Otsu's thresholding
+def segment_mri(image): 
+    threshold = filters.threshold_otsu(image) 
+    binary = image > threshold 
+    binary = morphology.remove_small_objects(binary, min_size=500) 
+    binary = morphology.remove_small_holes(binary, area_threshold=300) 
+    binary = clear_border(binary) 
+    return binary
+    # Step 3: Label and display results 
+def display_segmentation(image, mask):
+    labeled_mask = measure.label(mask) 
+    image_overlay = label2rgb(labeled_mask, image=image, bg_label=0)
+    
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
+    ax[0].imshow(image, cmap='gray') 
+    ax[0].set_title('Synthetic MRI Image')
+    ax[1].imshow(mask, cmap='gray') 
+    ax[1].set_title('Binary Mask')
+    ax[2].imshow(image_overlay) 
+    ax[2].set_title('Segmented Overlay') 
+    
+    for a in ax:
+        a.axis('off') 
+    plt.tight_layout() 
+    plt.show() 
+    
+    # Run the script 
+if __name__ == "__main__": 
+    mri_image = generate_synthetic_mri()
+    segmentation_mask = segment_mri(mri_image) 
+    display_segmentation(mri_image, segmentation_mask)
